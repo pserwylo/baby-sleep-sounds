@@ -609,6 +609,8 @@ public class MainActivity extends AppCompatActivity
 
             notifyItemChanged(existingIndex);
             notifyItemChanged(selectedIndex);
+
+            stopPlayback();
         }
     }
 
