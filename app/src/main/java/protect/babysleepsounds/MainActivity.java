@@ -1,27 +1,39 @@
 package protect.babysleepsounds;
 
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.os.Bundle;
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.recyclerview.widget.DividerItemDecoration;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckedTextView;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -46,8 +58,8 @@ public class MainActivity extends AppCompatActivity
     private static final String ORIGINAL_MP3_FILE = "original.mp3";
     private static final String PROCESSED_RAW_FILE = "processed.raw";
 
-    private Map<String, Integer> _soundMap;
     private Map<String, Integer> _timeMap;
+    private SoundAdapter _soundAdapter;
 
     private boolean _playing = false;
     private Timer _timer;
@@ -65,28 +77,11 @@ public class MainActivity extends AppCompatActivity
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        // These sound files by convention are:
-        // - take a ~10 second clip
-        // - Apply a 2 second fade-in and fade-out
-        // - Cut the first 3 seconds, and place it over the last three seconds
-        //   which should create a seamless track appropriate for looping
-        // - Save as a mp3 file, 128kbps, stereo
-        _soundMap = ImmutableMap.<String, Integer>builder()
-            .put(getResources().getString(R.string.campfire), R.raw.campfire)
-            .put(getResources().getString(R.string.dryer), R.raw.dryer)
-            .put(getResources().getString(R.string.fan), R.raw.fan)
-            .put(getResources().getString(R.string.ocean), R.raw.ocean)
-            .put(getResources().getString(R.string.rain), R.raw.rain)
-            .put(getResources().getString(R.string.refrigerator), R.raw.refrigerator)
-            .put(getResources().getString(R.string.shhhh), R.raw.shhhh)
-            .put(getResources().getString(R.string.shower), R.raw.shower)
-            .put(getResources().getString(R.string.stream), R.raw.stream)
-            .put(getResources().getString(R.string.vacuum), R.raw.vacuum)
-            .put(getResources().getString(R.string.water), R.raw.water)
-            .put(getResources().getString(R.string.waterfall), R.raw.waterfall)
-            .put(getResources().getString(R.string.waves), R.raw.waves)
-            .put(getResources().getString(R.string.whiteNoise), R.raw.white_noise)
-            .build();
+        RecyclerView soundList = findViewById(R.id.sound_list);
+        _soundAdapter = new SoundAdapter();
+        soundList.setAdapter(_soundAdapter);
+        soundList.setLayoutManager(new LinearLayoutManager(this));
+        soundList.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
 
         _timeMap = ImmutableMap.<String, Integer>builder()
                 .put(getResources().getString(R.string.disabled), 0)
@@ -99,16 +94,6 @@ public class MainActivity extends AppCompatActivity
                 .put(getResources().getString(R.string.time_4hour), 1000*60*60*4)
                 .put(getResources().getString(R.string.time_8hour), 1000*60*60*8)
                 .build();
-
-        final Spinner soundSpinner = findViewById(R.id.soundSpinner);
-
-        List<String> names = new ArrayList<>(_soundMap.keySet());
-
-        ArrayAdapter<String> dataAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, names);
-        dataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        soundSpinner.setAdapter(dataAdapter);
-
 
         final Spinner sleepTimeoutSpinner = findViewById(R.id.sleepTimerSpinner);
         List<String> times = new ArrayList<>(_timeMap.keySet());
@@ -180,9 +165,7 @@ public class MainActivity extends AppCompatActivity
 
     private void startPlayback()
     {
-        final Spinner soundSpinner = findViewById(R.id.soundSpinner);
-        String selectedSound = (String)soundSpinner.getSelectedItem();
-        int id = _soundMap.get(selectedSound);
+        int id = _soundAdapter.getSelectedId();
 
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
@@ -411,7 +394,7 @@ public class MainActivity extends AppCompatActivity
 
     private void setControlsEnabled(boolean enabled)
     {
-        for(int resId : new int[]{R.id.soundSpinner})
+        for(int resId : new int[]{R.id.sound_list})
         {
             final View view = findViewById(resId);
             view.setEnabled(enabled);
@@ -561,5 +544,96 @@ public class MainActivity extends AppCompatActivity
                 }
             })
             .show();
+    }
+
+    private class SoundAdapter extends RecyclerView.Adapter<SoundViewHolder> {
+
+        private final ImmutableMap<String, Integer> soundMap;
+        private final ImmutableList<String> soundList;
+        private int selectedIndex;
+
+        public SoundAdapter() {
+
+            // These sound files by convention are:
+            // - take a ~10 second clip
+            // - Apply a 2 second fade-in and fade-out
+            // - Cut the first 3 seconds, and place it over the last three seconds
+            //   which should create a seamless track appropriate for looping
+            // - Save as a mp3 file, 128kbps, stereo
+            soundMap = ImmutableSortedMap.<String, Integer>naturalOrder()
+                    .put(getResources().getString(R.string.campfire), R.raw.campfire)
+                    .put(getResources().getString(R.string.dryer), R.raw.dryer)
+                    .put(getResources().getString(R.string.fan), R.raw.fan)
+                    .put(getResources().getString(R.string.ocean), R.raw.ocean)
+                    .put(getResources().getString(R.string.rain), R.raw.rain)
+                    .put(getResources().getString(R.string.refrigerator), R.raw.refrigerator)
+                    .put(getResources().getString(R.string.shhhh), R.raw.shhhh)
+                    .put(getResources().getString(R.string.shower), R.raw.shower)
+                    .put(getResources().getString(R.string.stream), R.raw.stream)
+                    .put(getResources().getString(R.string.vacuum), R.raw.vacuum)
+                    .put(getResources().getString(R.string.water), R.raw.water)
+                    .put(getResources().getString(R.string.waterfall), R.raw.waterfall)
+                    .put(getResources().getString(R.string.waves), R.raw.waves)
+                    .put(getResources().getString(R.string.whiteNoise), R.raw.white_noise)
+                    .build();
+
+            soundList = ImmutableList.copyOf(soundMap.keySet());
+
+            selectedIndex = 0;
+        }
+
+        @NonNull
+        @Override
+        public SoundViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = getLayoutInflater().inflate(android.R.layout.simple_list_item_single_choice, parent, false);
+            return new SoundViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull SoundViewHolder holder, int position) {
+            holder.bind(soundList.get(position), selectedIndex == position, this);
+        }
+
+        @Override
+        public int getItemCount() {
+            return soundList.size();
+        }
+
+        public int getSelectedId() {
+            return soundMap.get(soundList.get(selectedIndex));
+        }
+
+        public void onSoundSelected(String soundName) {
+            int existingIndex = selectedIndex;
+            selectedIndex = soundList.indexOf(soundName);
+
+            notifyItemChanged(existingIndex);
+            notifyItemChanged(selectedIndex);
+        }
+    }
+
+    private static class SoundViewHolder extends RecyclerView.ViewHolder {
+
+        public final View itemView;
+        public final CheckedTextView label;
+
+        public SoundViewHolder(@NonNull View itemView) {
+            super(itemView);
+
+            this.itemView = itemView;
+            label = itemView.findViewById(android.R.id.text1);
+        }
+
+        public void bind(final String soundName, boolean isSelected, final SoundAdapter adapter) {
+            label.setText(soundName);
+            label.setChecked(isSelected);
+            itemView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    adapter.onSoundSelected(soundName);
+                }
+            });
+        }
+
     }
 }
