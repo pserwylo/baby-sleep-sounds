@@ -10,6 +10,7 @@ import android.media.AudioManager;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.RawRes;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -27,6 +28,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckedTextView;
+import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -165,7 +167,7 @@ public class MainActivity extends AppCompatActivity
 
     private void startPlayback()
     {
-        int id = _soundAdapter.getSelectedId();
+        Sound sound = _soundAdapter.getSelectedSound();
 
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
@@ -174,7 +176,7 @@ public class MainActivity extends AppCompatActivity
             File originalFile = new File(getFilesDir(), ORIGINAL_MP3_FILE);
 
             Log.i(TAG, "Writing file out prior to WAV conversion");
-            writeToFile(id, originalFile);
+            writeToFile(sound.getMp3Resource(), originalFile);
 
             final File processed = new File(getFilesDir(), PROCESSED_RAW_FILE);
             if(processed.exists())
@@ -259,7 +261,7 @@ public class MainActivity extends AppCompatActivity
      * @param output destination of the resource
      * @throws IOException if a write failure occurs
      */
-    private void writeToFile(int resource, File output) throws IOException
+    private void writeToFile(@RawRes int resource, File output) throws IOException
     {
         InputStream rawStream = getResources().openRawResource(resource);
         FileOutputStream outStream = null;
@@ -548,67 +550,43 @@ public class MainActivity extends AppCompatActivity
 
     private class SoundAdapter extends RecyclerView.Adapter<SoundViewHolder> {
 
-        private final ImmutableMap<String, Integer> soundMap;
-        private final ImmutableList<String> soundList;
-        private int selectedIndex;
+        private ImmutableList<Sound> sounds;
+        private Sound selectedSound;
 
         public SoundAdapter() {
-
-            // These sound files by convention are:
-            // - take a ~10 second clip
-            // - Apply a 2 second fade-in and fade-out
-            // - Cut the first 3 seconds, and place it over the last three seconds
-            //   which should create a seamless track appropriate for looping
-            // - Save as a mp3 file, 128kbps, stereo
-            soundMap = ImmutableSortedMap.<String, Integer>naturalOrder()
-                    .put(getResources().getString(R.string.campfire), R.raw.campfire)
-                    .put(getResources().getString(R.string.dryer), R.raw.dryer)
-                    .put(getResources().getString(R.string.fan), R.raw.fan)
-                    .put(getResources().getString(R.string.ocean), R.raw.ocean)
-                    .put(getResources().getString(R.string.rain), R.raw.rain)
-                    .put(getResources().getString(R.string.refrigerator), R.raw.refrigerator)
-                    .put(getResources().getString(R.string.shhhh), R.raw.shhhh)
-                    .put(getResources().getString(R.string.shower), R.raw.shower)
-                    .put(getResources().getString(R.string.stream), R.raw.stream)
-                    .put(getResources().getString(R.string.vacuum), R.raw.vacuum)
-                    .put(getResources().getString(R.string.water), R.raw.water)
-                    .put(getResources().getString(R.string.waterfall), R.raw.waterfall)
-                    .put(getResources().getString(R.string.waves), R.raw.waves)
-                    .put(getResources().getString(R.string.whiteNoise), R.raw.white_noise)
-                    .build();
-
-            soundList = ImmutableList.copyOf(soundMap.keySet());
-
-            selectedIndex = 0;
+            sounds = Sound.getAllSounds(MainActivity.this);
+            selectedSound = sounds.get(0);
         }
 
         @NonNull
         @Override
         public SoundViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = getLayoutInflater().inflate(android.R.layout.simple_list_item_single_choice, parent, false);
+            View view = getLayoutInflater().inflate(R.layout.sound_list_item, parent, false);
             return new SoundViewHolder(view);
         }
 
         @Override
         public void onBindViewHolder(@NonNull SoundViewHolder holder, int position) {
-            holder.bind(soundList.get(position), selectedIndex == position, this);
+            Sound toBind = sounds.get(position);
+            holder.bind(toBind, selectedSound == toBind, this);
         }
 
         @Override
         public int getItemCount() {
-            return soundList.size();
+            return Sound.getAllSounds(MainActivity.this).size();
         }
 
-        public int getSelectedId() {
-            return soundMap.get(soundList.get(selectedIndex));
+        public Sound getSelectedSound() {
+            return selectedSound;
         }
 
-        public void onSoundSelected(String soundName) {
-            int existingIndex = selectedIndex;
-            selectedIndex = soundList.indexOf(soundName);
+        public void onSoundSelected(Sound sound) {
+            int existingIndex = sounds.indexOf(selectedSound);
+            int newIndex = sounds.indexOf(sound);
+            selectedSound = sound;
 
             notifyItemChanged(existingIndex);
-            notifyItemChanged(selectedIndex);
+            notifyItemChanged(newIndex);
 
             stopPlayback();
         }
@@ -617,22 +595,30 @@ public class MainActivity extends AppCompatActivity
     private static class SoundViewHolder extends RecyclerView.ViewHolder {
 
         public final View itemView;
-        public final CheckedTextView label;
+        public final TextView label;
+        public final ImageView image;
+        public final View nonSelectedImage;
 
         public SoundViewHolder(@NonNull View itemView) {
             super(itemView);
 
             this.itemView = itemView;
-            label = itemView.findViewById(android.R.id.text1);
+            label = itemView.findViewById(R.id.label);
+            image = itemView.findViewById(R.id.image_background);
+            nonSelectedImage = itemView.findViewById(R.id.non_selected_cover);
         }
 
-        public void bind(final String soundName, boolean isSelected, final SoundAdapter adapter) {
-            label.setText(soundName);
-            label.setChecked(isSelected);
+        public void bind(final Sound sound, boolean isSelected, final SoundAdapter adapter) {
+            label.setText(sound.getLabel());
+            label.setBackgroundColor(itemView.getContext().getColor(isSelected ? R.color.text_on_image_background : R.color.text_on_image_background_not_selected));
+            label.setTextSize(isSelected ? 34 : 20);
+            image.setImageDrawable(itemView.getContext().getDrawable(sound.getImageResource()));
+            nonSelectedImage.setVisibility(isSelected ? View.GONE : View.VISIBLE);
+
             itemView.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    adapter.onSoundSelected(soundName);
+                    adapter.onSoundSelected(sound);
                 }
             });
         }

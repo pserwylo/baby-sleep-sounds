@@ -62,7 +62,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@id/button"
-        tools:listitem="@android:layout/simple_list_item_single_choice"/>
+        tools:listitem="@layout/sound_list_item" />
 
     <Button
         android:id="@+id/button"
